@@ -1,4 +1,4 @@
-module skydb
+module github.com/ro-tex/skydb
 
 go 1.16
 
