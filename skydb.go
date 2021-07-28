@@ -2,6 +2,7 @@ package skydb
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 
 	"gitlab.com/NebulousLabs/errors"
@@ -36,9 +37,12 @@ type SkyDB struct {
 // "Sia-Agent" as user agent and we'll try to get the password for skyd from the
 // environment.
 func New(sk crypto.SecretKey, pk crypto.PublicKey, opts client.Options) (*SkyDB, error) {
-	opts, err := client.DefaultOptions()
-	if err != nil {
-		return nil, errors.AddContext(err, "failed to get default client options")
+	if reflect.DeepEqual(opts, client.Options{}) {
+		var err error
+		opts, err = client.DefaultOptions()
+		if err != nil {
+			return nil, errors.AddContext(err, "failed to get default client options")
+		}
 	}
 	skydb := &SkyDB{
 		Client: &client.Client{Options: opts},
