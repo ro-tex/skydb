@@ -1,3 +1,7 @@
+/*
+Package skydb provides a simple library for working with Skynet Lab's SkyDB and
+the Skynet Registry on which SkyDB is built.
+*/
 package skydb
 
 import (
@@ -10,8 +14,6 @@ import (
 	"gitlab.com/SkynetLabs/skyd/skymodules"
 	"gitlab.com/SkynetLabs/skyd/skymodules/renter"
 	"go.sia.tech/siad/crypto"
-	"go.sia.tech/siad/modules"
-	"go.sia.tech/siad/types"
 )
 
 var (
@@ -19,22 +21,22 @@ var (
 	ErrNotFound = errors.New("skydb entry not found")
 )
 
-// SkyDBI is the interface for communicating with SkyDB. We use an interface, so
-// we can easily override it for testing purposes.
-type SkyDBI interface {
-	Read(hash crypto.Hash) ([]byte, uint64, error)
-	Write(data []byte, dataKey crypto.Hash, rev uint64) error
-}
+type (
+	// SkyDBI is the interface for communicating with SkyDB. We use an
+	// interface, so we can easily override it for testing purposes.
+	SkyDBI interface {
+		Read(hash crypto.Hash) ([]byte, uint64, error)
+		Write(data []byte, dataKey crypto.Hash, rev uint64) error
+	}
 
-type SkyDB struct {
-	r *Registry
-}
-
-type Registry struct {
-	Client *client.Client
-	sk     crypto.SecretKey
-	pk     crypto.PublicKey
-}
+	// SkyDB is a decentralized tool for storing mutable data built on top of
+	// Skynet Registry.
+	//
+	// See https://blog.sia.tech/skydb-a-mutable-database-for-the-decentralized-web-7170beeaa985
+	SkyDB struct {
+		r *Registry
+	}
+)
 
 // New creates a new SkyDB client with the given options.
 // If the options are empty we'll look for skyd at localhost:9980, we'll use
@@ -48,13 +50,12 @@ func New(sk crypto.SecretKey, pk crypto.PublicKey, opts client.Options) (*SkyDB,
 			return nil, errors.AddContext(err, "failed to get default client options")
 		}
 	}
-	r := &Registry{
-		Client: &client.Client{Options: opts},
-		sk:     sk,
-		pk:     pk,
-	}
 	skydb := &SkyDB{
-		r: r,
+		r: &Registry{
+			Client: &client.Client{Options: opts},
+			sk:     sk,
+			pk:     pk,
+		},
 	}
 	return skydb, nil
 }
@@ -89,44 +90,6 @@ func (db SkyDB) Write(data []byte, dataKey crypto.Hash, rev uint64) error {
 		return errors.AddContext(err, "failed to write to the registry")
 	}
 	return nil
-}
-
-// RegistryWrite updates the registry entry with the given dataKey to contain
-// the given skylink. Returns a SkylinkV2.
-func (r Registry) RegistryWrite(skylink string, dataKey crypto.Hash, rev uint64) (skymodules.Skylink, error) {
-	var sl skymodules.Skylink
-	err := sl.LoadString(skylink)
-	if err != nil {
-		return skymodules.Skylink{}, errors.AddContext(err, "failed to load skylink data")
-	}
-	// Update the registry with that link.
-	spk := types.Ed25519PublicKey(r.pk)
-	srv := modules.NewRegistryValue(dataKey, sl.Bytes(), rev, modules.RegistryTypeWithoutPubkey).Sign(r.sk)
-	err = r.Client.RegistryUpdate(spk, dataKey, srv.Revision, srv.Signature, sl)
-	if err != nil {
-		return skymodules.Skylink{}, err
-	}
-	return skymodules.NewSkylinkV2(spk, dataKey), nil
-}
-
-// RegistryRead reads a registry entry and returns the SkylinkV2 it contains,
-// as well as the revision.
-func (r Registry) RegistryRead(dataKey crypto.Hash) (skymodules.Skylink, uint64, error) {
-	spk := types.Ed25519PublicKey(r.pk)
-	srv, err := r.Client.RegistryRead(spk, dataKey)
-	if err != nil {
-		return skymodules.Skylink{}, 0, errors.AddContext(err, "failed to read from the registry")
-	}
-	err = srv.Verify(r.pk)
-	if err != nil {
-		return skymodules.Skylink{}, 0, errors.AddContext(err, "the value we read failed validation")
-	}
-	var sl skymodules.Skylink
-	err = sl.LoadBytes(srv.Data)
-	if err != nil {
-		return skymodules.Skylink{}, 0, errors.AddContext(err, "registry value is not a valid skylink")
-	}
-	return sl, srv.Revision, nil
 }
 
 // uploadData uploads the given data to skynet and returns a SkylinkV1.
