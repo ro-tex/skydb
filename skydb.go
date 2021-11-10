@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ro-tex/skydb/registry"
 	"gitlab.com/NebulousLabs/errors"
 	"gitlab.com/SkynetLabs/skyd/node/api/client"
 	"gitlab.com/SkynetLabs/skyd/skymodules"
@@ -34,7 +35,7 @@ type (
 	//
 	// See https://blog.sia.tech/skydb-a-mutable-database-for-the-decentralized-web-7170beeaa985
 	SkyDB struct {
-		r *Registry
+		r *registry.Registry
 	}
 )
 
@@ -51,18 +52,14 @@ func New(sk crypto.SecretKey, pk crypto.PublicKey, opts client.Options) (*SkyDB,
 		}
 	}
 	skydb := &SkyDB{
-		r: &Registry{
-			Client: &client.Client{Options: opts},
-			sk:     sk,
-			pk:     pk,
-		},
+		r: registry.New(&client.Client{Options: opts}, pk, sk),
 	}
 	return skydb, nil
 }
 
 // Read retrieves from SkyDB the data that corresponds to the given key set.
 func (db SkyDB) Read(dataKey crypto.Hash) ([]byte, uint64, error) {
-	s, rev, err := db.r.RegistryRead(dataKey)
+	s, rev, err := db.r.Read(dataKey)
 	if err != nil && (strings.Contains(err.Error(), renter.ErrRegistryEntryNotFound.Error()) || strings.Contains(err.Error(), renter.ErrRegistryLookupTimeout.Error())) {
 		return nil, 0, ErrNotFound
 	}
@@ -85,7 +82,7 @@ func (db SkyDB) Write(data []byte, dataKey crypto.Hash, rev uint64) error {
 	if err != nil {
 		return errors.AddContext(err, "failed to upload data")
 	}
-	_, err = db.r.RegistryWrite(skylink, dataKey, rev)
+	_, err = db.r.Write(skylink, dataKey, rev)
 	if err != nil {
 		return errors.AddContext(err, "failed to write to the registry")
 	}
